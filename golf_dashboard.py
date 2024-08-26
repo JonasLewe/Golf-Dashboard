@@ -1,10 +1,14 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 import numpy as np
 import altair as alt
 import plotly.express as px
 import matplotlib.pyplot as plt
 from datetime import datetime
+from initialize_db import initialize_db
+from data_preprocessing import preprocess_data
+
 
 st.set_page_config(
     page_title="Golf Dashboard",
@@ -16,10 +20,25 @@ st.set_page_config(
 alt.themes.enable("dark")
 
 
-def load_data(file_path):
-    df = pd.read_csv(file_path)
-    df["Time"] = pd.to_datetime(df["Time"])
+def load_data_from_db(table="shots"):
+    conn = sqlite3.connect("golf_data.db")
+    df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+    conn.close()
     return df
+
+
+def insert_data_into_db(df, club_type, table="shots"):
+    conn = sqlite3.connect("golf_data.db")
+    c = conn.cursor()
+
+    # Füge den Schläger-Typ zu jedem Datensatz hinzu
+    df = preprocess_data(df, club_type)
+
+    # Daten in die Datenbank einfügen
+    df.to_sql(table, conn, if_exists="append", index=False)
+
+    conn.commit()
+    conn.close()
 
 
 # Funktion zur Erstellung eines angepassten Scatter-Plots mit Testdaten
@@ -27,8 +46,8 @@ def plot_custom_dispersion_chart(df):
     x_min, x_max = -40, 40
     fig = px.scatter(
         df,
-        x="Deflection Distance",
-        y="Total[yd]",
+        x="deflection_distance",
+        y="total_yd",
         labels={
             "Deflection Distance": "Deflection Distance (yd)",
             "Total[yd]": "Total Distance (yd)",
@@ -63,23 +82,23 @@ def plot_custom_dispersion_chart(df):
 
 def plot_avg_distance_over_time(df):
     # Extrahiere nur das Datum aus der Time-Spalte und formatiere es korrekt
-    df["Time"] = pd.to_datetime(df["Time"])
+    df["time"] = pd.to_datetime(df["time"])
 
     # Extrahiere nur das Datum aus der Time-Spalte
-    df["Date"] = df["Time"].dt.floor("d")
+    df["date"] = df["time"].dt.floor("d")
 
     # Gruppiere nach Datum und berechne den Durchschnitt der Total Distance
-    df_avg = df.groupby("Date", as_index=False)["Total[yd]"].mean()
+    df_avg = df.groupby("date", as_index=False)["total_yd"].mean()
 
     # Runde den Durchschnittswert der Total Distance auf zwei Dezimalstellen
-    df_avg["Total[yd]"] = df_avg["Total[yd]"].round(2)
+    df_avg["total_yd"] = df_avg["total_yd"].round(2)
 
     # Erstelle das Liniendiagramm
     fig = px.line(
         df_avg,
-        x="Date",
-        y="Total[yd]",
-        labels={"Date": "Date", "Total[yd]": "Average Distance (yd)"},
+        x="date",
+        y="total_yd",
+        labels={"date": "Date", "total_yd": "Average Distance (yd)"},
         title="Average Total Distance Over Time",
     )
 
@@ -115,32 +134,35 @@ def plot_histogram(data, parameter, num_bins, title):
 
 
 def main():
-    df = load_data("processed_7I_Golfboy_SHOT_20240823.csv")
+    # Datenbank initialisieren falls nicht vorhanden
+    initialize_db()
+
+    df = load_data_from_db()
 
     with st.sidebar:
         st.title("⛳ Golf Data Dashboard")
 
-        club = st.selectbox("Wähle den Schläger aus:", df["Type"].unique())
+        club = st.selectbox("Wähle den Schläger aus:", df["type"].unique())
         date_range = st.date_input(
             "Wähle den Zeitraum aus:",
-            [df["Time"].min().date(), df["Time"].max().date()],
+            [df["time"].min().date(), df["time"].max().date()],
         )
 
         start_date = datetime.combine(date_range[0], datetime.min.time())
         end_date = datetime.combine(date_range[1], datetime.max.time())
 
         filtered_df = df[
-            (df["Type"] == club) & (df["Time"] >= start_date) & (df["Time"] <= end_date)
+            (df["type"] == club) & (df["time"] >= start_date) & (df["time"] <= end_date)
         ]
 
-        avg_total_distance = filtered_df["Total[yd]"].mean()
-        avg_carry_distance = filtered_df["Carry[yd]"].mean()
-        avg_club_speed = filtered_df["Club Speed[mph]"].mean()
-        avg_launch_angle = filtered_df["Launch Angle"].mean()
+        avg_total_distance = filtered_df["total_yd"].mean()
+        avg_carry_distance = filtered_df["carry_yd"].mean()
+        avg_club_speed = filtered_df["club_speed_mph"].mean()
+        avg_launch_angle = filtered_df["launch_angle"].mean()
 
-        max_total_distance = filtered_df["Total[yd]"].max()
-        max_carry_distance = filtered_df["Carry[yd]"].max()
-        max_club_speed = filtered_df["Club Speed[mph]"].max()
+        max_total_distance = filtered_df["total_yd"].max()
+        max_carry_distance = filtered_df["carry_yd"].max()
+        max_club_speed = filtered_df["club_speed_mph"].max()
 
         st.markdown("### Durchschnittswerte")
 
@@ -154,6 +176,46 @@ def main():
         st.markdown(f"**Top Distance**: {max_total_distance} yd")
         st.markdown(f"**Top Carry Distance**: {max_carry_distance} yd")
         st.markdown(f"**Top Club Speed**: {max_club_speed} mph")
+
+        # CSV-Datei hochladen
+        uploaded_file = st.file_uploader("Lade eine CSV-Datei hoch", type=["csv"])
+
+        # Schläger auswählen
+        club = st.selectbox(
+            "Wähle den Schläger aus:",
+            [
+                "3I",
+                "4I",
+                "5I",
+                "6I",
+                "7I",
+                "8I",
+                "9I",
+                "PW",
+                "SW",
+                "LW",
+                "DR",
+                "2W",
+                "3W",
+            ],
+        )
+
+        # Import-Button
+        if st.button("CSV importieren und in die Datenbank einfügen"):
+            if uploaded_file is not None and club:
+                # Lade die CSV-Datei in einen DataFrame
+                df = pd.read_csv(uploaded_file)
+
+                # Füge die Daten in die Datenbank ein
+                insert_data_into_db(df, club)
+
+                st.success(
+                    f"Die Daten aus der Datei wurden erfolgreich mit dem Schläger '{club}' importiert."
+                )
+
+                # Laden der Daten aus der Datenbank und Anzeige im Dashboard
+                df = load_data_from_db()
+                st.dataframe(df)
 
     # Anzeige der beiden Charts nebeneinander in der obersten Zeile
     col1, col2 = st.columns(2)
@@ -174,7 +236,7 @@ def main():
     with col1:
         st.subheader("Total Distance")
         plot_histogram(
-            filtered_df["Total[yd]"],
+            filtered_df["total_yd"],
             "Total Distance [yd]",
             num_bins=10,
             title="Total Distance",
@@ -183,7 +245,7 @@ def main():
     with col2:
         st.subheader("Carry Distance")
         plot_histogram(
-            filtered_df["Carry[yd]"],
+            filtered_df["carry_yd"],
             "Carry Distance [yd]",
             num_bins=10,
             title="Carry Distance",
@@ -192,7 +254,7 @@ def main():
     with col3:
         st.subheader("Club Speed")
         plot_histogram(
-            filtered_df["Club Speed[mph]"],
+            filtered_df["club_speed_mph"],
             "Club Speed [mph]",
             num_bins=10,
             title="Club Speed",
@@ -201,7 +263,7 @@ def main():
     with col4:
         st.subheader("Launch Angle")
         plot_histogram(
-            filtered_df["Launch Angle"],
+            filtered_df["launch_angle"],
             "Launch Angle [°]",
             num_bins=20,
             title="Launch Angle",

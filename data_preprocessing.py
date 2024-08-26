@@ -28,8 +28,8 @@ def create_deflection_distance_column(df):
 
 
 # Funktion, um das CSV zu verarbeiten
-def process_file(file_path, club):
-    df = pd.read_csv(file_path)
+def preprocess_data(df, club):
+    # df = pd.read_csv(file_path)
     df["Launch Direction"] = df["Launch Direction"].apply(convert_launch_direction)
     df["Type"] = club  # Setzt den Schläger-Typ in der 'Type'-Spalte
 
@@ -53,47 +53,21 @@ def process_file(file_path, club):
         # Konvertiere alle Werte erst zu Strings, dann ersetze das Komma und konvertiere zu float
         df[col] = df[col].astype(str).str.replace(",", ".").astype(float)
 
-    # Optional: Speichern des verarbeiteten DataFrames in eine neue Datei
-    output_file = f"processed_{club}_{file_path}"
-    df.to_csv(output_file, index=False)
-    print(f"Processed file saved as {output_file}")
+    df.rename(
+        columns={
+            "Time": "time",
+            "Total[yd]": "total_yd",
+            "Carry[yd]": "carry_yd",
+            "Height[m]": "height_m",
+            "Smash Factor": "smash_factor",
+            "Club Speed[mph]": "club_speed_mph",
+            "Ball Speed[mph]": "ball_speed_mph",
+            "Launch Angle": "launch_angle",
+            "Launch Direction": "launch_direction",
+            "Type": "type",
+            "Deflection Distance": "deflection_distance",
+        },
+        inplace=True,
+    )
+
     return df
-
-
-# Main-Funktion mit Argument Parsing
-def main():
-    parser = argparse.ArgumentParser(
-        description="Process a CSV file with launch direction data."
-    )
-    parser.add_argument("file", type=str, help="Path to the CSV file")
-    parser.add_argument(
-        "club",
-        type=str,
-        choices=[
-            "3I",
-            "4I",
-            "5I",
-            "6I",
-            "7I",
-            "8I",
-            "9I",
-            "DR",
-            "2W",
-            "3W",
-            "5W",
-            "PW",
-            "SW",
-            "LW",
-        ],
-        help="Golf club used in the session (e.g., 3I, 9I, DR, SW, 1W)",
-    )
-
-    # args = parser.parse_args()
-
-    # Verarbeite das File
-    # process_file(args.file, args.club)
-    process_file("Golfboy_SHOT_20240823.csv", "7I")
-
-
-if __name__ == "__main__":
-    main()
