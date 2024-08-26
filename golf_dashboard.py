@@ -6,7 +6,6 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-# Konfiguration der Seite
 st.set_page_config(
     page_title="Golf Dashboard",
     page_icon="⛳",
