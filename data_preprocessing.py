@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import argparse
 
 
 def convert_launch_direction(value):

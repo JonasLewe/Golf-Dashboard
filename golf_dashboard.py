@@ -23,6 +23,9 @@ alt.themes.enable("dark")
 def load_data_from_db(table="shots"):
     conn = sqlite3.connect("golf_data.db")
     df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+
+    df["time"] = pd.to_datetime(df["time"])  # Konvertiert 'Time' in ein Datetime-Objekt
+
     conn.close()
     return df
 
@@ -176,6 +179,8 @@ def main():
         st.markdown(f"**Top Distance**: {max_total_distance} yd")
         st.markdown(f"**Top Carry Distance**: {max_carry_distance} yd")
         st.markdown(f"**Top Club Speed**: {max_club_speed} mph")
+
+        st.markdown("---")  # Fügt eine horizontale Linie ein
 
         # CSV-Datei hochladen
         uploaded_file = st.file_uploader("Lade eine CSV-Datei hoch", type=["csv"])
